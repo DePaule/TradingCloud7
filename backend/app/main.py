@@ -1,3 +1,10 @@
+import debugpy
+# Debugpy hört auf Port 5678. Mit wait_for_client() wird gewartet, bis der Debugger attachiert.
+debugpy.listen(("0.0.0.0", 5678))
+print("Waiting for debugger attach...")
+# Optional: Zum Anhalten, bis der Debugger verbunden wird. In der Entwicklung hilfreich, dann wieder auskommentieren.
+# debugpy.wait_for_client()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
