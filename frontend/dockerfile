@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Nur package-Dateien kopieren und installieren
 COPY package*.json ./
-RUN npm install --omit=optional && npm install -g vite@5.2.8
+RUN npm install --omit=optional
 
 # Rest des Projekts kopieren
 COPY . .
