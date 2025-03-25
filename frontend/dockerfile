@@ -1,0 +1,18 @@
+# Basis-Image mit Node 18
+FROM node:18
+
+# Arbeitsverzeichnis im Container
+WORKDIR /app
+
+# Nur package-Dateien kopieren und installieren
+COPY package*.json ./
+RUN npm install --omit=optional && npm install -g vite@5.2.8
+
+# Rest des Projekts kopieren
+COPY . .
+
+# Port für Vite Dev-Server öffnen
+EXPOSE 5173
+
+# Direkt vite starten
+CMD ["vite", "--host"]

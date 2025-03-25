@@ -1,5 +1,7 @@
 fastapi
-uvicorn
-sqlalchemy
-psycopg2
+uvicorn[standard]
 pandas
+numpy
+ta
+sqlalchemy
+psycopg2-binary
