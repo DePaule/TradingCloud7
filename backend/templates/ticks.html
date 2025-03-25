@@ -1,0 +1,59 @@
+<!-- TradingCloud7/backend/templates/ticks.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Aggregierte Tickdaten für {{ asset }}</title>
+    <style>
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1>Aggregierte Tickdaten für {{ asset }}</h1>
+    <p>Zeitraum: {{ start }} bis {{ end }}, Timeframe: {{ timeframe }}</p>
+    {% if inserted_count > 0 %}
+      <p><strong>{{ inserted_count }}</strong> neue Datensätze eingefügt.</p>
+    {% endif %}
+    {% if data %}
+      <table>
+          <thead>
+              <tr>
+                  <th>Timestamp</th>
+                  <th>Bid Open</th>
+                  <th>Bid High</th>
+                  <th>Bid Low</th>
+                  <th>Bid Close</th>
+                  <th>Ask Open</th>
+                  <th>Ask High</th>
+                  <th>Ask Low</th>
+                  <th>Ask Close</th>
+                  <th>Bid Volume</th>
+                  <th>Ask Volume</th>
+                  <th>Avg Spread</th>
+              </tr>
+          </thead>
+          <tbody>
+              {% for candle in data %}
+              <tr>
+                  <td>{{ candle.timestamp }}</td>
+                  <td>{{ candle.bid_open }}</td>
+                  <td>{{ candle.bid_high }}</td>
+                  <td>{{ candle.bid_low }}</td>
+                  <td>{{ candle.bid_close }}</td>
+                  <td>{{ candle.ask_open }}</td>
+                  <td>{{ candle.ask_high }}</td>
+                  <td>{{ candle.ask_low }}</td>
+                  <td>{{ candle.ask_close }}</td>
+                  <td>{{ candle.bid_volume }}</td>
+                  <td>{{ candle.ask_volume }}</td>
+                  <td>{{ candle.avg_spread }}</td>
+              </tr>
+              {% endfor %}
+          </tbody>
+      </table>
+    {% else %}
+      <p>Keine Daten verfügbar.</p>
+    {% endif %}
+</body>
+</html>

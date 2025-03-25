@@ -1,3 +1,5 @@
+from sqlalchemy import text
+
 def create_table_if_not_exists(engine, table_name: str):
     create_sql = f"""
     CREATE TABLE IF NOT EXISTS {table_name} (

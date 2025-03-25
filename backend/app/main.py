@@ -1,42 +1,39 @@
+# TradingCloud7/backend/app/main.py
 import debugpy
-# Debugpy hört auf Port 5678. Mit wait_for_client() wird gewartet, bis der Debugger attachiert.
+
+# Starte den Debug-Listener auf Port 5678
 debugpy.listen(("0.0.0.0", 5678))
-print("Waiting for debugger attach...")
-# Optional: Zum Anhalten, bis der Debugger verbunden wird. In der Entwicklung hilfreich, dann wieder auskommentieren.
-# debugpy.wait_for_client()
+print("Waiting for debugger to attach...", flush=True)
+# Warten, bis der Debugger angehängt ist – entferne dies, wenn du nicht warten möchtest:
+debugpy.wait_for_client()
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from app.importer import import_ticks_for_range
+from datetime import datetime
+from app.importer import import_and_get_data
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="TradingCloud Data Import")
 
 class DataRequest(BaseModel):
-    asset: str        # e.g. "EURUSD"
-    start: str        # "2023-01-01"
-    end: str          # "2023-01-03"
-    timeframe: str    # e.g. "M1", "M5", "H1"
+    asset: str
+    start: str
+    end: str
+    timeframe: str
 
-@app.post("/fetch-data")
-def fetch_data(req: DataRequest):
-    count = import_ticks_for_range(
-        asset=req.asset,
-        start=req.start,
-        end=req.end,
-        timeframe=req.timeframe
-    )
-    return {"status": "ok", "inserted": count}
-
+@app.get("/fetch-data")
+def fetch_data(asset: str, start: str, end: str, timeframe: str):
+    try:
+        datetime.strptime(start, "%Y-%m-%d")
+        datetime.strptime(end, "%Y-%m-%d")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Ungültiges Datumsformat. Nutze YYYY-MM-DD")
+    try:
+        aggregated_data, inserted_count = import_and_get_data(asset, start, end, timeframe)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "ok", "inserted": inserted_count, "data": aggregated_data}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # Ohne --reload, damit debugpy korrekt funktioniert:
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000)
