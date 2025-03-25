@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 5173
 
 # Direkt vite starten
-CMD ["vite", "--host"]
+CMD ["npx", "vite", "--host"]
