@@ -1,4 +1,3 @@
-# -*- coding: latin-1 -*-
 import psycopg2
 import sys
 
@@ -8,7 +7,7 @@ import sys
 # - Benutzername (trader)
 # - Passwort (trader)
 # - Datenbankname (tradingcloud)
-DSN = "postgresql://trader:trader@localhost:5432/tradingcloud"
+DSN = "postgresql://trader:trader@db:5432/tradingcloud"
 
 def main():
     print(f"Verbindungs-DSN: {DSN}")
@@ -21,7 +20,7 @@ def main():
                 version = cur.fetchone()
                 print("DB-Version:", version[0])
     except Exception as e:
-        print("Fehler beim ö mit der Datenbank:", e)
+        print("Fehler beim Verbinden mit der Datenbank:", e)
         sys.exit(1)
 
 if __name__ == "__main__":
