@@ -7,6 +7,7 @@ services:
       POSTGRES_USER: trader
       POSTGRES_PASSWORD: trader
       POSTGRES_DB: tradingcloud
+      LANG: en_US.utf8
     ports:
       - "5432:5432"
     volumes:

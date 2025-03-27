@@ -1,39 +1,59 @@
-# TradingCloud7/backend/app/main.py
-import debugpy
-
-# Starte den Debug-Listener auf Port 5678
-debugpy.listen(("0.0.0.0", 5678))
-print("Waiting for debugger to attach...", flush=True)
-# Warten, bis der Debugger angehängt ist – entferne dies, wenn du nicht warten möchtest:
-debugpy.wait_for_client()
-
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Query
 from datetime import datetime
-from app.importer import import_and_get_data
+import psycopg2
+import os
 
-app = FastAPI(title="TradingCloud Data Import")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://trader:trader@localhost:5432/tradingcloud")
 
-class DataRequest(BaseModel):
-    asset: str
-    start: str
-    end: str
-    timeframe: str
+app = FastAPI(title="TradingCloud API")
 
-@app.get("/fetch-data")
-def fetch_data(asset: str, start: str, end: str, timeframe: str):
+@app.get("/api/candles")
+async def get_candles(
+    asset: str,
+    resolution: str = Query(..., description="Resolution e.g., M10 for 10 minutes"),
+    start: datetime = Query(...),
+    end: datetime = Query(...)
+):
+    # Parse resolution, e.g., "M10" -> 10 minutes
+    if resolution.startswith("M"):
+        try:
+            minutes = int(resolution[1:])
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid resolution format")
+    else:
+        raise HTTPException(status_code=400, detail="Resolution must start with 'M'")
+    
+    table_name = f"{asset.lower()}_tick"
     try:
-        datetime.strptime(start, "%Y-%m-%d")
-        datetime.strptime(end, "%Y-%m-%d")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Ungültiges Datumsformat. Nutze YYYY-MM-DD")
-    try:
-        aggregated_data, inserted_count = import_and_get_data(asset, start, end, timeframe)
+        conn = psycopg2.connect(DATABASE_URL)
+        with conn.cursor() as cur:
+            query = f"""
+            SELECT 
+                time_bucket(%s, timestamp) AS bucket,
+                first(bid, timestamp) AS open,
+                max(bid) AS high,
+                min(bid) AS low,
+                last(bid, timestamp) AS close,
+                sum(bid_volume + ask_volume) AS volume
+            FROM {table_name}
+            WHERE timestamp >= %s AND timestamp <= %s
+            GROUP BY bucket
+            ORDER BY bucket;
+            """
+            interval_str = f'{minutes} minutes'
+            cur.execute(query, (interval_str, start, end))
+            rows = cur.fetchall()
+        conn.close()
+        candles = []
+        for row in rows:
+            candles.append({
+                "bucket": row[0].isoformat(),
+                "open": row[1],
+                "high": row[2],
+                "low": row[3],
+                "close": row[4],
+                "volume": row[5]
+            })
+        return {"candles": candles}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    return {"status": "ok", "inserted": inserted_count, "data": aggregated_data}
-
-if __name__ == "__main__":
-    import uvicorn
-    # Ohne --reload, damit debugpy korrekt funktioniert:
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000)
