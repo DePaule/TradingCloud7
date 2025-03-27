@@ -5,7 +5,7 @@ from app.datasources.dukascopy import fetch_tick_data, parse_ticks
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://trader:trader@localhost:5432/tradingcloud")
 
-def create_tick_table_if_not_exists(asset: str):
+def create_tick_table_if_not_exists(asset: str) -> str:
     table_name = f"{asset.lower()}_tick"
     create_table_sql = f"""
     CREATE TABLE IF NOT EXISTS {table_name} (
@@ -24,44 +24,72 @@ def create_tick_table_if_not_exists(asset: str):
     conn.close()
     return table_name
 
+def get_existing_hours(table_name: str, start: datetime, end: datetime):
+    """
+    Returns a set of hourly timestamps (UTC truncated to the hour) that already have data.
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    with conn.cursor() as cur:
+        # date_trunc('hour', timestamp) gives us the hour block
+        query = f"""
+        SELECT date_trunc('hour', timestamp) AS hour_block
+        FROM {table_name}
+        WHERE timestamp >= %s AND timestamp <= %s
+        GROUP BY hour_block
+        """
+        cur.execute(query, (start, end))
+        rows = cur.fetchall()
+    conn.close()
+
+    # Convert rows to a set of datetime objects
+    existing = set()
+    for row in rows:
+        # row[0] is a datetime with minutes/seconds = 0
+        existing.add(row[0])
+    return existing
+
 def import_tick_data_range(asset: str, start: datetime, end: datetime) -> int:
     """
     Downloads tick data for every hour between start and end.
-    Skips download if data for a specific hour already exists.
-    For non-crypto assets, skips Saturdays.
+    Skips the entire weekend (Saturday/Sunday) for non-crypto assets.
+    Only fetches data for hours that are missing in the DB.
     """
     table_name = create_tick_table_if_not_exists(asset)
     total_inserted = 0
+
+    # Align start/end to the hour
+    current_time = start.replace(minute=0, second=0, microsecond=0)
+    end_time = end.replace(minute=0, second=0, microsecond=0)
+
+    # Get a set of all existing hours in the DB for this range
+    existing_hours = get_existing_hours(table_name, current_time, end_time)
+
     conn = psycopg2.connect(DATABASE_URL)
     conn.autocommit = True
     with conn.cursor() as cur:
-        current_time = start.replace(minute=0, second=0, microsecond=0)
-        while current_time <= end:
-            # Skip Saturdays for non-crypto assets.
-            if asset.lower() != "crypto" and current_time.weekday() == 5:
-                print(f"Skipping {current_time} (Saturday, no data for non-crypto assets).")
+        while current_time <= end_time:
+            # Skip weekend for non-crypto assets
+            # weekday() == 5 -> Samstag, == 6 -> Sonntag
+            if asset.lower() != "crypto" and current_time.weekday() in [5, 6]:
                 current_time += timedelta(hours=1)
                 continue
 
-            # Check if data for the current hour already exists.
-            next_hour = current_time + timedelta(hours=1)
-            cur.execute(
-                f"SELECT COUNT(*) FROM {table_name} WHERE timestamp >= %s AND timestamp < %s",
-                (current_time, next_hour)
-            )
-            count = cur.fetchone()[0]
-            if count > 0:
-                print(f"Data already exists for {current_time}. Skipping download.")
+            # Check if this hour is already in DB
+            if current_time in existing_hours:
+                # Already has data, skip
                 current_time += timedelta(hours=1)
                 continue
 
-            year = current_time.year
-            month = current_time.month
-            day = current_time.day
-            hour = current_time.hour
-            print(f"Fetching tick data for {asset} at {current_time}...")
+            print(f"[INFO] Hour missing in DB: {current_time}, fetching from Dukascopy...")
+
             try:
-                raw_data = fetch_tick_data(asset, year, month, day, hour)
+                raw_data = fetch_tick_data(
+                    asset,
+                    current_time.year,
+                    current_time.month,
+                    current_time.day,
+                    current_time.hour
+                )
                 ticks = parse_ticks(raw_data, current_time)
                 if ticks:
                     args_str = ",".join(
@@ -76,11 +104,12 @@ def import_tick_data_range(asset: str, start: datetime, end: datetime) -> int:
                     cur.execute(insert_query)
                     inserted = cur.rowcount
                     total_inserted += inserted
-                    print(f"Inserted {inserted} ticks for {current_time}.")
+                    print(f"[INFO] Inserted {inserted} ticks for {current_time}.")
                 else:
-                    print(f"No ticks found for {current_time}.")
+                    print(f"[WARN] No ticks found for {current_time}.")
             except Exception as e:
-                print(f"Error processing {current_time}: {e}")
+                print(f"[ERROR] Failed to fetch or insert data for {current_time}: {e}")
+
             current_time += timedelta(hours=1)
     conn.close()
     return total_inserted
