@@ -1,7 +1,7 @@
 import os
 import psycopg2
 from datetime import datetime, timedelta
-from datasources.dukascopy import fetch_tick_data, parse_ticks
+from app.datasources.dukascopy import fetch_tick_data, parse_ticks
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://trader:trader@localhost:5432/tradingcloud")
 

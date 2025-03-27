@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 from datetime import datetime
-from importer import import_tick_data_range
+from app.importer import import_tick_data_range
 import psycopg2
 import os
 
@@ -94,5 +94,5 @@ async def get_candles(
         raise HTTPException(status_code=500, detail=str(e))
 
 # Serve the web interface from the frontend folder
-from fastapi.staticfiles import StaticFiles
-app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
+#from fastapi.staticfiles import StaticFiles
+#app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
