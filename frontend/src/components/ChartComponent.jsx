@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { createChart, CrosshairMode } from 'lightweight-charts';
+import { createChart } from 'lightweight-charts';
 
 const ChartComponent = ({ data }) => {
-  const chartContainerRef = useRef(null);
+  const chartContainerRef = useRef();
 
   useEffect(() => {
     const chart = createChart(chartContainerRef.current, {
@@ -10,37 +10,27 @@ const ChartComponent = ({ data }) => {
       height: 400,
       layout: {
         backgroundColor: '#ffffff',
-        textColor: '#333',
+        textColor: '#333'
       },
       grid: {
         vertLines: { color: '#eee' },
-        horzLines: { color: '#eee' },
+        horzLines: { color: '#eee' }
       },
       timeScale: {
         timeVisible: true,
-        secondsVisible: false,
-      },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-      },
+        secondsVisible: false
+      }
     });
 
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderUpColor: '#26a69a',
-      borderDownColor: '#ef5350',
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-    });
+    const candleSeries = chart.addCandlestickSeries();
 
-    // Chart-Daten transformieren
-    const chartData = data.map((candle) => ({
+    // Mapping der Backend-Daten ins Format von lightweight‑charts:
+    const chartData = data.map(candle => ({
       time: Math.floor(new Date(candle.bucket).getTime() / 1000),
       open: candle.open,
       high: candle.high,
       low: candle.low,
-      close: candle.close,
+      close: candle.close
     }));
 
     candleSeries.setData(chartData);
@@ -56,12 +46,7 @@ const ChartComponent = ({ data }) => {
     };
   }, [data]);
 
-  return (
-    <div
-      ref={chartContainerRef}
-      style={{ position: 'relative', width: '100%', height: '400px' }}
-    />
-  );
+  return <div ref={chartContainerRef} style={{ position: 'relative', width: '100%' }} />;
 };
 
 export default ChartComponent;

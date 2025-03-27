@@ -2,49 +2,44 @@ import React, { useState } from 'react';
 import ChartComponent from './ChartComponent';
 import TableComponent from './TableComponent';
 
-/**
- * Gekürzte, aber umfangreiche Liste von Dukascopy-Instrumenten.
- * Du kannst hier weitere hinzufügen (z.B. alle Stocks/ETFs).
- */
+// Erweiterte Liste der Dukascopy-Instrumente – hier kannst du alle Assets einfügen, die Dukascopy liefert.
+// Die untenstehende Liste ist ein Beispiel.
 const DUKASCOPY_ASSETS = [
-  // Forex (große Auswahl)
-  'AUDCAD','AUDCHF','AUDJPY','AUDNZD','AUDUSD','CADCHF','CADJPY','CHFJPY','EURAUD','EURCAD',
-  'EURCHF','EURCZK','EURDKK','EURGBP','EURHKD','EURHUF','EURJPY','EURNOK','EURNZD','EURPLN',
-  'EURRUB','EURSEK','EURSGD','EURTRY','EURUSD','GBPAUD','GBPCAD','GBPCHF','GBPDKK','GBPHKD',
-  'GBPJPY','GBPNOK','GBPNZD','GBPPLN','GBPSGD','GBPUSD','NZDCAD','NZDCHF','NZDJPY','NZDUSD',
-  'SGDJPY','USDCAD','USDCHF','USDCNH','USDDKK','USDHKD','USDHUF','USDILS','USDJPY','USDMXN',
-  'USDNOK','USDPLN','USDRUB','USDSEK','USDSGD','USDTRY','USDZAR','ZARJPY',
-
-  // Metals
-  'XAGUSD','XAUUSD','XPTUSD','XPDUSD',
-
-  // Indizes (CFDs)
-  'DEU.IDX/EUR','FRA.IDX/EUR','GBR.IDX/GBP','HKG.IDX/HKD','JPN.IDX/JPY','USA30.IDX/USD',
-  'USA100.IDX/USD','USA500.IDX/USD','EUSTX50.IDX/EUR','CHE.IDX/CHF','AUS.IDX/AUD',
-  'ESP.IDX/EUR','POL.IDX/PLN','UK100.IDX/GBP','NAS.IDX/USD','VOL.IDX/USD','ITA.IDX/EUR',
-  'SUI.IDX/CHF','DEN.IDX/DKK','SWE.IDX/SEK',
-
-  // Cryptos (CFDs)
-  'BTC/USD','ETH/USD','LTC/USD','BCH/USD','EOS/USD','XRP/USD','DSH/USD','XLM/USD','ADA/USD','XMR/USD',
-
-  // Beispielhaft ein paar Aktien (CFDs) - hier nur wenige
-  'AAPL.US/USD','TSLA.US/USD','AMZN.US/USD','GOOG.US/USD','NFLX.US/USD',
+  'AUDCAD','AUDCHF','AUDJPY','AUDNZD','AUDUSD',
+  'CADCHF','CADJPY','CHFJPY','EURAUD','EURCAD',
+  'EURCHF','EURGBP','EURJPY','EURNZD','EURUSD',
+  'GBPAUD','GBPCAD','GBPCHF','GBPJPY','GBPNZD',
+  'GBPUSD','NZDCAD','NZDCHF','NZDJPY','NZDUSD',
+  'USDCAD','USDCHF','USDJPY',
+  // Weitere Assets können hier hinzugefügt werden…
 ];
 
-/** 
- * Alle gewünschten Timeframes 
- */
+// Timeframes (Hinzugefügt: M2, M3, M4, M6, M7, M10, M12, M15, M20, M30, H1, H2, H4, D1)
 const TIMEFRAMES = [
-  'M1','M2','M3','M4','M5','M6','M7','M10','M12',
-  'M15','M20','M30','H1','H2','H4','D1'
+  'M2','M3','M4','M6','M7','M10','M12','M15','M20','M30','H1','H2','H4','D1'
 ];
+
+// Hilfsfunktion: formatiert ein Date in das "datetime-local"-Format (YYYY-MM-DDTHH:MM)
+const toDateTimeLocal = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+  const YYYY = date.getFullYear();
+  const MM = pad(date.getMonth() + 1);
+  const DD = pad(date.getDate());
+  const HH = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+  return `${YYYY}-${MM}-${DD}T${HH}:${mm}`;
+};
+
+const now = new Date();
+const defaultEnd = toDateTimeLocal(now);
+const defaultStart = toDateTimeLocal(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
 
 const DataView = () => {
   const [asset, setAsset] = useState('EURUSD');
   const [timeframe, setTimeframe] = useState('M10');
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [viewType, setViewType] = useState('table'); // "chart" oder "table"
+  const [start, setStart] = useState(defaultStart);
+  const [end, setEnd] = useState(defaultEnd);
+  const [viewType, setViewType] = useState('chart'); // Standardmäßig Chart anzeigen
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -53,21 +48,19 @@ const DataView = () => {
     e.preventDefault();
     setError('');
     setData([]);
-
     if (!asset || !start || !end) {
       setError('Bitte füllen Sie alle Felder aus.');
       return;
     }
-
     setLoading(true);
     try {
       const params = new URLSearchParams({
         asset,
         resolution: timeframe,
         start: new Date(start).toISOString(),
-        end: new Date(end).toISOString()
+        end: new Date(end).toISOString(),
       });
-      // Hier dein Endpoint anpassen, falls du ein anderes Backend hast
+      // Hier ggf. die Backend-Adresse anpassen, falls nicht auf derselben Domain!
       const response = await fetch(`/api/candles?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`Fehler: ${response.statusText}`);
@@ -82,42 +75,55 @@ const DataView = () => {
 
   return (
     <div>
-      <form onSubmit={fetchData} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'left' }}>
-        <label>Asset</label>
-        <select value={asset} onChange={(e) => setAsset(e.target.value)}>
-          {DUKASCOPY_ASSETS.map(sym => (
+      {/* Flaches, horizontales Formular – ganz oben, links */}
+      <form
+        onSubmit={fetchData}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '4px',
+          margin: 0,
+          flexWrap: 'nowrap'
+        }}
+      >
+        <label style={{ margin: 0 }}>Asset</label>
+        <select value={asset} onChange={(e) => setAsset(e.target.value)} style={{ margin: 0 }}>
+          {DUKASCOPY_ASSETS.map((sym) => (
             <option key={sym} value={sym}>{sym}</option>
           ))}
         </select>
 
-        <label>Timeframe</label>
-        <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)}>
-          {TIMEFRAMES.map(tf => (
+        <label style={{ margin: 0 }}>Timeframe</label>
+        <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} style={{ margin: 0 }}>
+          {TIMEFRAMES.map((tf) => (
             <option key={tf} value={tf}>{tf}</option>
           ))}
         </select>
 
-        <label>Von</label>
+        <label style={{ margin: 0 }}>Von</label>
         <input
           type="datetime-local"
           value={start}
           onChange={(e) => setStart(e.target.value)}
+          style={{ margin: 0 }}
         />
 
-        <label>Bis</label>
+        <label style={{ margin: 0 }}>Bis</label>
         <input
           type="datetime-local"
           value={end}
           onChange={(e) => setEnd(e.target.value)}
+          style={{ margin: 0 }}
         />
 
-        <label>Ansicht</label>
-        <select value={viewType} onChange={(e) => setViewType(e.target.value)}>
+        <label style={{ margin: 0 }}>Ansicht</label>
+        <select value={viewType} onChange={(e) => setViewType(e.target.value)} style={{ margin: 0 }}>
           <option value="chart">Chart</option>
           <option value="table">Tabelle</option>
         </select>
 
-        <button type="submit">Daten abrufen</button>
+        <button type="submit" style={{ margin: 0 }}>Daten abrufen</button>
       </form>
 
       {loading && <p>Lädt...</p>}
