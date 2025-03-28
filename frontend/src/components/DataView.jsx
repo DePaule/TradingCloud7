@@ -2,24 +2,23 @@ import React, { useState } from 'react';
 import ChartComponent from './ChartComponent';
 import TableComponent from './TableComponent';
 
-// Erweiterte Liste der Dukascopy-Instrumente – hier kannst du alle Assets einfügen, die Dukascopy liefert.
-// Die untenstehende Liste ist ein Beispiel.
+// Hier alle Dukascopy-Instrumente einfügen (dies ist ein Beispiel – ergänze bei Bedarf weitere):
 const DUKASCOPY_ASSETS = [
   'AUDCAD','AUDCHF','AUDJPY','AUDNZD','AUDUSD',
   'CADCHF','CADJPY','CHFJPY','EURAUD','EURCAD',
   'EURCHF','EURGBP','EURJPY','EURNZD','EURUSD',
   'GBPAUD','GBPCAD','GBPCHF','GBPJPY','GBPNZD',
   'GBPUSD','NZDCAD','NZDCHF','NZDJPY','NZDUSD',
-  'USDCAD','USDCHF','USDJPY',
-  // Weitere Assets können hier hinzugefügt werden…
+  'USDCAD','USDCHF','USDJPY'
+  // Weitere Instrumente: siehe https://www.dukascopy-node.app/instruments
 ];
 
-// Timeframes (Hinzugefügt: M2, M3, M4, M6, M7, M10, M12, M15, M20, M30, H1, H2, H4, D1)
+// Erweitertes Timeframe-Array (M2, M3, M4, M6, M7, M10, M12, M15, M20, M30, H1, H2, H4, D1)
 const TIMEFRAMES = [
   'M2','M3','M4','M6','M7','M10','M12','M15','M20','M30','H1','H2','H4','D1'
 ];
 
-// Hilfsfunktion: formatiert ein Date in das "datetime-local"-Format (YYYY-MM-DDTHH:MM)
+// Hilfsfunktion: Formatiert ein Datum im "datetime-local"-Format (YYYY-MM-DDTHH:MM)
 const toDateTimeLocal = (date) => {
   const pad = (n) => String(n).padStart(2, '0');
   const YYYY = date.getFullYear();
@@ -39,7 +38,7 @@ const DataView = () => {
   const [timeframe, setTimeframe] = useState('M10');
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
-  const [viewType, setViewType] = useState('chart'); // Standardmäßig Chart anzeigen
+  const [viewType, setViewType] = useState('chart'); // Standardmäßig Chart
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -60,7 +59,7 @@ const DataView = () => {
         start: new Date(start).toISOString(),
         end: new Date(end).toISOString(),
       });
-      // Hier ggf. die Backend-Adresse anpassen, falls nicht auf derselben Domain!
+      // Passe ggf. die Backend-Adresse an, falls dein API-Endpunkt nicht unter derselben Domain liegt!
       const response = await fetch(`/api/candles?${params.toString()}`);
       if (!response.ok) {
         throw new Error(`Fehler: ${response.statusText}`);
@@ -75,7 +74,7 @@ const DataView = () => {
 
   return (
     <div>
-      {/* Flaches, horizontales Formular – ganz oben, links */}
+      {/* Flaches, horizontales Formular – oben links */}
       <form
         onSubmit={fetchData}
         style={{
@@ -123,7 +122,7 @@ const DataView = () => {
           <option value="table">Tabelle</option>
         </select>
 
-        <button type="submit" style={{ margin: 0 }}>Daten abrufen</button>
+        <button type="submit" style={{ margin: 0 }}>refresh</button>
       </form>
 
       {loading && <p>Lädt...</p>}

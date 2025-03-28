@@ -24,7 +24,7 @@ const ChartComponent = ({ data }) => {
 
     const candleSeries = chart.addCandlestickSeries();
 
-    // Mapping der Backend-Daten ins Format von lightweight‑charts:
+    // Konvertiere Backend-Daten in das von lightweight-charts erwartete Format:
     const chartData = data.map(candle => ({
       time: Math.floor(new Date(candle.bucket).getTime() / 1000),
       open: candle.open,
@@ -34,6 +34,16 @@ const ChartComponent = ({ data }) => {
     }));
 
     candleSeries.setData(chartData);
+
+    // Füge eine konstante Preislinie bei 1 hinzu:
+    candleSeries.createPriceLine({
+      price: 1,
+      color: 'red',
+      lineWidth: 2,
+      lineStyle: 2,
+      axisLabelVisible: true,
+      title: '1'
+    });
 
     const handleResize = () => {
       chart.applyOptions({ width: chartContainerRef.current.clientWidth });
