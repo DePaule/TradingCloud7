@@ -49,67 +49,66 @@ def get_existing_hours(table_name: str, start: datetime, end: datetime):
     return existing
 
 def import_tick_data_range(asset: str, start: datetime, end: datetime) -> int:
-    """
-    Downloads tick data for every hour between start and end.
-    Skips the entire weekend (Saturday/Sunday) for non-crypto assets.
-    Only fetches data for hours that are missing in the DB.
-    """
     table_name = create_tick_table_if_not_exists(asset)
     total_inserted = 0
 
-    # Align start/end to the hour
-    current_time = start.replace(minute=0, second=0, microsecond=0)
-    end_time = end.replace(minute=0, second=0, microsecond=0)
-
-    # Get a set of all existing hours in the DB for this range
-    existing_hours = get_existing_hours(table_name, current_time, end_time)
+    # Aligniere Start/End-Zeit auf volle Stunden
+    start_aligned = start.replace(minute=0, second=0, microsecond=0)
+    end_aligned = end.replace(minute=0, second=0, microsecond=0)
 
     conn = psycopg2.connect(DATABASE_URL)
     conn.autocommit = True
     with conn.cursor() as cur:
-        while current_time <= end_time:
-            # Skip weekend for non-crypto assets
-            # weekday() == 5 -> Samstag, == 6 -> Sonntag
-            if asset.lower() != "crypto" and current_time.weekday() in [5, 6]:
-                current_time += timedelta(hours=1)
-                continue
+        # Prüfe, ob für den gesamten Zeitraum bereits Daten vorhanden sind
+        cur.execute(
+            f"SELECT MIN(timestamp), MAX(timestamp) FROM {table_name} WHERE timestamp >= %s AND timestamp <= %s",
+            (start_aligned, end_aligned)
+        )
+        min_max = cur.fetchone()
+    
+    # Falls sowohl ein Minimum als auch ein Maximum vorhanden sind und diese den gesamten Zeitraum abdecken,
+    # gehen wir davon aus, dass alle relevanten Stunden in der DB liegen.
+    if min_max and min_max[0] is not None and min_max[1] is not None:
+        if min_max[0] <= start_aligned and min_max[1] >= end_aligned:
+            print("[INFO] Vollständige Daten im DB vorhanden. Kein Import nötig.")
+            conn.close()
+            return 0
 
-            # Check if this hour is already in DB
-            if current_time in existing_hours:
-                # Already has data, skip
-                current_time += timedelta(hours=1)
-                continue
+    # Andernfalls: Erstelle Liste aller Stunden im Zeitraum (bei Nicht-Krypto werden Wochenenden übersprungen)
+    hours_to_fetch = []
+    current = start_aligned
+    while current <= end_aligned:
+        if asset.lower() == "crypto" or current.weekday() not in [5, 6]:
+            hours_to_fetch.append(current)
+        current += timedelta(hours=1)
+    
+    # Ermittle, welche Stunden in der DB bereits vorhanden sind
+    existing_hours = get_existing_hours(table_name, start_aligned, end_aligned)
+    missing_hours = [hour for hour in hours_to_fetch if hour not in existing_hours]
 
-            print(f"[INFO] Hour missing in DB: {current_time}, fetching from Dukascopy...")
-
+    with conn.cursor() as cur:
+        for hour in missing_hours:
+            print(f"[INFO] Fehlende Stunde in DB: {hour}, hole Daten von Dukascopy...")
             try:
-                raw_data = fetch_tick_data(
-                    asset,
-                    current_time.year,
-                    current_time.month,
-                    current_time.day,
-                    current_time.hour
-                )
-                ticks = parse_ticks(raw_data, current_time)
+                raw_data = fetch_tick_data(asset, hour.year, hour.month, hour.day, hour.hour)
+                ticks = parse_ticks(raw_data, hour)
                 if ticks:
                     args_str = ",".join(
                         cur.mogrify("(%s, %s, %s, %s, %s)", tick).decode("utf-8")
                         for tick in ticks
                     )
                     insert_query = (
-                        f"INSERT INTO {table_name} (timestamp, bid, ask, bid_volume, ask_volume) VALUES "
-                        + args_str +
+                        f"INSERT INTO {table_name} (timestamp, bid, ask, bid_volume, ask_volume) VALUES " +
+                        args_str +
                         " ON CONFLICT (timestamp) DO NOTHING;"
                     )
                     cur.execute(insert_query)
                     inserted = cur.rowcount
                     total_inserted += inserted
-                    print(f"[INFO] Inserted {inserted} ticks for {current_time}.")
+                    print(f"[INFO] {inserted} Tick(s) für {hour} eingefügt.")
                 else:
-                    print(f"[WARN] No ticks found for {current_time}.")
+                    print(f"[WARN] Für {hour} wurden keine Ticks gefunden.")
             except Exception as e:
-                print(f"[ERROR] Failed to fetch or insert data for {current_time}: {e}")
-
-            current_time += timedelta(hours=1)
+                print(f"[ERROR] Fehler beim Laden von Daten für {hour}: {e}")
     conn.close()
     return total_inserted

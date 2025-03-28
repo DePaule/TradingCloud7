@@ -92,7 +92,3 @@ async def get_candles(
         return {"candles": candles}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# Serve the web interface from the frontend folder
-#from fastapi.staticfiles import StaticFiles
-#app.mount("/", StaticFiles(directory="frontend", html=True), name="static")

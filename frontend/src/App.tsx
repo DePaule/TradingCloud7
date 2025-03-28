@@ -1,156 +1,93 @@
 import React, { useState, FormEvent } from 'react';
-import axios from 'axios';
-import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-  TimeScale
-} from 'chart.js';
-import 'chartjs-adapter-date-fns';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, TimeScale);
-
-interface Candle {
-  bucket: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
+interface CandleData {
+  candles: any[];
 }
 
 const App: React.FC = () => {
-  const [asset, setAsset] = useState<string>('GBPUSD');
-  const [resolution, setResolution] = useState<string>('M10');
-  const [start, setStart] = useState<string>('2025-03-24T00:00');
-  const [end, setEnd] = useState<string>('2025-03-25T23:59');
-  const [candles, setCandles] = useState<Candle[]>([]);
+  const [asset, setAsset] = useState<string>("EURUSD");
+  const [resolution, setResolution] = useState<string>("M10");
+  const [start, setStart] = useState<string>("");
+  const [end, setEnd] = useState<string>("");
+  const [data, setData] = useState<CandleData | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleFetch = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError(null);
+    setData(null);
+
+    const queryParams = new URLSearchParams({
+      asset,
+      resolution,
+      start,
+      end,
+    });
+
     try {
-      const startISO = new Date(start).toISOString();
-      const endISO = new Date(end).toISOString();
-      const response = await axios.get('/api/candles', {
-        params: { asset, resolution, start: startISO, end: endISO }
-      });
-      setCandles(response.data.candles);
+      const response = await fetch(`http://localhost:8000/api/candles?${queryParams.toString()}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const result: CandleData = await response.json();
+      setData(result);
     } catch (err: any) {
-      console.error(err);
-      setError('Error fetching data');
-    }
-    setLoading(false);
-  };
-
-  const chartData = {
-    labels: candles.map(c => new Date(c.bucket)),
-    datasets: [
-      {
-        label: 'Open',
-        data: candles.map(c => c.open),
-        borderColor: 'blue',
-        fill: false
-      },
-      {
-        label: 'High',
-        data: candles.map(c => c.high),
-        borderColor: 'green',
-        fill: false
-      },
-      {
-        label: 'Low',
-        data: candles.map(c => c.low),
-        borderColor: 'red',
-        fill: false
-      },
-      {
-        label: 'Close',
-        data: candles.map(c => c.close),
-        borderColor: 'orange',
-        fill: false
-      }
-    ]
-  };
-
-  const chartOptions = {
-    responsive: true,
-    scales: {
-      x: {
-        type: 'time',
-        time: { tooltipFormat: 'PPpp' },
-        title: { display: true, text: 'Time' }
-      },
-      y: {
-        title: { display: true, text: 'Price' }
-      }
+      setError(err.toString());
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{ margin: '20px' }}>
-      <h1>TradingCloud Data Viewer</h1>
-      <form onSubmit={handleSubmit}>
+    <div style={{ padding: '20px' }}>
+      <h1>Candlestick Data Fetcher</h1>
+      <form onSubmit={handleFetch}>
         <div>
           <label>Asset: </label>
-          <input type="text" value={asset} onChange={(e) => setAsset(e.target.value)} required />
+          <input
+            type="text"
+            value={asset}
+            onChange={(e) => setAsset(e.target.value)}
+          />
         </div>
         <div>
-          <label>Resolution (e.g., M10): </label>
-          <input type="text" value={resolution} onChange={(e) => setResolution(e.target.value)} required />
+          <label>Resolution (z.B. M10): </label>
+          <input
+            type="text"
+            value={resolution}
+            onChange={(e) => setResolution(e.target.value)}
+          />
         </div>
         <div>
-          <label>Start Date: </label>
-          <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required />
+          <label>Von (ISO-Datum): </label>
+          <input
+            type="text"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            placeholder="YYYY-MM-DDTHH:mm:ssZ"
+          />
         </div>
         <div>
-          <label>End Date: </label>
-          <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
+          <label>Bis (ISO-Datum): </label>
+          <input
+            type="text"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            placeholder="YYYY-MM-DDTHH:mm:ssZ"
+          />
         </div>
-        <button type="submit">Load Data</button>
+        <button type="submit">Daten abrufen</button>
       </form>
-      {loading && <p>Loading data...</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {candles.length > 0 && (
-        <>
-          <h2>Data Table</h2>
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
-              <tr>
-                <th style={{ border: '1px solid #ddd', padding: '8px' }}>Time Bucket</th>
-                <th style={{ border: '1px solid #ddd', padding: '8px' }}>Open</th>
-                <th style={{ border: '1px solid #ddd', padding: '8px' }}>High</th>
-                <th style={{ border: '1px solid #ddd', padding: '8px' }}>Low</th>
-                <th style={{ border: '1px solid #ddd', padding: '8px' }}>Close</th>
-                <th style={{ border: '1px solid #ddd', padding: '8px' }}>Volume</th>
-              </tr>
-            </thead>
-            <tbody>
-              {candles.map((candle, index) => (
-                <tr key={index}>
-                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>
-                    {new Date(candle.bucket).toLocaleString()}
-                  </td>
-                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>{candle.open}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>{candle.high}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>{candle.low}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>{candle.close}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '8px' }}>{candle.volume}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <h2>Candlestick Chart</h2>
-          <Line data={chartData} options={chartOptions} />
-        </>
+
+      {loading && <p>Loading...</p>}
+      {error && <p style={{ color: 'red' }}>Error: {error}</p>}
+      {data && (
+        <div>
+          <h2>Abgerufene Candle-Daten</h2>
+          <pre>{JSON.stringify(data, null, 2)}</pre>
+        </div>
       )}
     </div>
   );
