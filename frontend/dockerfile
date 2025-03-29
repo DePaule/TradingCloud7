@@ -1,14 +1,7 @@
 FROM node:18
-
 WORKDIR /app
-
-# Zuerst nur die package-Dateien kopieren und Abhängigkeiten installieren
 COPY package*.json ./
 RUN npm install
-
-# Restlichen Code kopieren
 COPY . .
-
 EXPOSE 5173
-
 CMD ["npm", "run", "dev"]

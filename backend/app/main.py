@@ -4,7 +4,7 @@ from datetime import datetime, time
 import psycopg2
 import os
 
-# Import the function that imports tick data
+# Import the function that imports tick data (creates the table if it doesn't exist)
 from app.importer import import_tick_data_range
 
 # Retrieve the database URL from environment variables
@@ -79,8 +79,16 @@ async def get_candles(
     """
     GET endpoint to retrieve aggregated candlestick data for a given asset and time range.
     The time range is adjusted to 00:00 (start) and 23:59 (end).
+    Before aggregation, missing tick data is imported via import_tick_data_range.
     """
     start, end = adjust_start_end(start, end)
+
+    # Import missing tick data before aggregation
+    try:
+        _ = import_tick_data_range(asset, start, end)
+    except Exception as e:
+        # Log or ignore errors from import_tick_data_range if needed.
+        pass
 
     # Parse the resolution input
     if resolution.endswith("s"):
