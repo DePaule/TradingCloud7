@@ -7,7 +7,7 @@ def fetch_tick_data(instr, yr, m, d, h):
     """
     Downloads raw tick data for the specified instrument and time from Dukascopy.
     """
-    url = f"https://datafeed.dukascopy.com/datafeed/{instr}/{yr:04d}/{(m-1):02d}/{d:02d}/{h:02d}h_ticks.bi5"
+    url = f"https://datafeed.dukascopy.com/datafeed/{instr.upper()}/{yr:04d}/{(m-1):02d}/{d:02d}/{h:02d}h_ticks.bi5"
     r = requests.get(url)
     r.raise_for_status()
     raw = r.content

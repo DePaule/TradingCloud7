@@ -5,7 +5,7 @@ import psycopg2
 import os
 
 # Import the function that imports tick data (creates the table if it doesn't exist)
-from app.importer import import_tick_data_range
+from .importer import import_tick_data_range
 
 # Retrieve the database URL from environment variables
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://trader:trader@db:5432/tradingcloud")
