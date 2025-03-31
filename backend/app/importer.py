@@ -63,7 +63,7 @@ async def import_tick_data_range(asset: str, start: datetime, end: datetime, poo
     # Check if the table already contains data for the full range.
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT MIN(timestamp) AS min_ts, MAX(timestamp) AS max_ts FROM {table_name} WHERE timestamp >= $1 AND timestamp <= $2",
+            f"SELECT MIN(timestamp) AS min_ts, MAX(timestamp) AS max_ts FROM {table_name}",
             start_aligned, end_aligned
         )
     if row and row["min_ts"] and row["max_ts"]:
