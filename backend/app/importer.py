@@ -1,6 +1,6 @@
 import os
 import psycopg2
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from .datasources.dukascopy import fetch_tick_data, parse_ticks
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://trader:trader@localhost:5432/tradingcloud")
@@ -69,8 +69,13 @@ def import_tick_data_range(asset: str, start: datetime, end: datetime) -> int:
     # Falls sowohl ein Minimum als auch ein Maximum vorhanden sind und diese den gesamten Zeitraum abdecken,
     # gehen wir davon aus, dass alle relevanten Stunden in der DB liegen.
     if min_max and min_max[0] is not None and min_max[1] is not None:
-        if min_max[0] <= start_aligned and min_max[1] >= end_aligned:
-            print("[INFO] Vollständige Daten im DB vorhanden. Kein Import nötig.")
+    # Konvertiere die DB-Zeiten zu offset-aware Datetime-Objekten (angenommen, sie sind in UTC)
+        db_min = min_max[0].replace(tzinfo=None)
+        db_max = min_max[1].replace(tzinfo=None)
+
+        
+        if db_min <= start_aligned and db_max >= end_aligned:
+            print("[INFO] Vollständige Daten in der DB vorhanden. Kein Import nötig.")
             conn.close()
             return 0
 
