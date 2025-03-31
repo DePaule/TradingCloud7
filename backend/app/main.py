@@ -1,72 +1,97 @@
-from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel, Field
-from datetime import datetime, time
-import psycopg2
 import os
+import logging
+from datetime import datetime, time
+from fastapi import FastAPI, HTTPException, Query, Depends
+from pydantic import BaseModel, Field
+import asyncpg
+import psycopg2
+import asyncio
 
-# Import the function that imports tick data (creates the table if it doesn't exist)
+# Import the blocking tick data importer function.
 from .importer import import_tick_data_range
 
-# Retrieve the database URL from environment variables
+# Read the database URL from environment variables.
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://trader:trader@db:5432/tradingcloud")
 
-app = FastAPI(title="TradingCloud API")
+# Configure logging.
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+app = FastAPI(title="TradingCloud API (Improved)")
+
+# ----- Asynchronous DB Pool (for endpoints using asyncpg) -----
+@app.on_event("startup")
+async def startup():
+    try:
+        app.state.db_pool = await asyncpg.create_pool(DATABASE_URL)
+        logger.info("Database pool created successfully.")
+    except Exception as e:
+        logger.exception("Error creating database pool: %s", e)
+        raise
+
+@app.on_event("shutdown")
+async def shutdown():
+    await app.state.db_pool.close()
+    logger.info("Database pool closed.")
+
+# Dependency: acquire a DB connection from the asyncpg pool.
+async def get_db():
+    async with app.state.db_pool.acquire() as connection:
+        yield connection
+
+# Synchronous connection for endpoints using psycopg2 (candle endpoint).
 def get_connection():
-    """
-    Returns a new PostgreSQL connection using DATABASE_URL.
-    """
     return psycopg2.connect(DATABASE_URL)
 
 def adjust_start_end(start: datetime, end: datetime):
     """
-    Adjust the provided start and end datetimes so that the start time is 00:00 and
-    the end time is 23:59 of their respective dates.
+    Adjusts the provided start and end datetimes so that start is set to 00:00 
+    and end is set to 23:59 of their respective days.
     """
     new_start = datetime.combine(start.date(), time(0, 0))
     new_end = datetime.combine(end.date(), time(23, 59))
     return new_start, new_end
 
-# ---------------------------
-# Existing endpoints
-# ---------------------------
-
+# ----- Pydantic Model -----
 class FetchDataRequest(BaseModel):
     asset: str = Field(..., description="Asset symbol, e.g., EURUSD")
     start: datetime = Field(..., description="Start datetime in ISO format")
     end: datetime = Field(..., description="End datetime in ISO format")
 
+# ----- Endpoints -----
+
 @app.post("/fetch-data")
 async def fetch_data(request: FetchDataRequest):
     """
-    POST endpoint to import tick data for a given asset and time range.
-    The time range is automatically adjusted to start at 00:00 and end at 23:59.
+    POST endpoint to import tick data for the specified asset and time range.
+    The time range is adjusted internally to cover 00:00 to 23:59.
     """
     adjusted_start, adjusted_end = adjust_start_end(request.start, request.end)
     try:
-        inserted_count = import_tick_data_range(request.asset, adjusted_start, adjusted_end)
+        # Run the blocking importer in a separate thread.
+        inserted_count = await asyncio.to_thread(
+            import_tick_data_range, request.asset, adjusted_start, adjusted_end, app.state.db_pool
+        )
         return {"message": "Tick data imported successfully", "inserted_rows": inserted_count}
     except Exception as e:
+        logger.exception("Error importing tick data")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/ticks")
-async def get_ticks(asset: str, start: datetime, end: datetime):
+async def get_ticks(asset: str, start: datetime, end: datetime, db=Depends(get_db)):
     """
     GET endpoint to retrieve raw tick data for a given asset and time range.
     """
     start, end = adjust_start_end(start, end)
     table_name = f"{asset.lower()}_tick"
     try:
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute(
-                f"SELECT * FROM {table_name} WHERE timestamp >= %s AND timestamp <= %s ORDER BY timestamp",
-                (start, end)
-            )
-            rows = cur.fetchall()
-        conn.close()
-        return {"ticks": rows}
+        rows = await db.fetch(
+            f"SELECT * FROM {table_name} WHERE timestamp >= $1 AND timestamp <= $2 ORDER BY timestamp",
+            start, end
+        )
+        return {"ticks": [dict(row) for row in rows]}
     except Exception as e:
+        logger.exception("Error fetching tick data")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/candles")
@@ -79,18 +104,18 @@ async def get_candles(
     """
     GET endpoint to retrieve aggregated candlestick data for a given asset and time range.
     The time range is adjusted to 00:00 (start) and 23:59 (end).
-    Before aggregation, missing tick data is imported via import_tick_data_range.
+    Before aggregation, missing tick data is imported.
+    This endpoint uses a synchronous psycopg2 connection (as in your original implementation)
+    to ensure that candle fetching continues to work.
     """
     start, end = adjust_start_end(start, end)
-
-    # Import missing tick data before aggregation
     try:
-        _ = import_tick_data_range(asset, start, end)
+        # Import missing tick data (blocking call wrapped in asyncio.to_thread).
+        await asyncio.to_thread(import_tick_data_range, asset, start, end, app.state.db_pool)
     except Exception as e:
-        # Log or ignore errors from import_tick_data_range if needed.
-        pass
+        logger.warning("Error importing missing tick data: %s", e)
 
-    # Parse the resolution input
+    # Parse the resolution string (as in your original code).
     if resolution.endswith("s"):
         try:
             seconds = int(resolution[:-1])
@@ -122,9 +147,10 @@ async def get_candles(
     try:
         conn = get_connection()
         with conn.cursor() as cur:
+            # Note: interval_str is embedded directly into the query string.
             query = f"""
             SELECT 
-                time_bucket(%s, timestamp) AS bucket,
+                time_bucket('{interval_str}', timestamp) AS bucket,
                 first(bid, timestamp) AS open,
                 max(bid) AS high,
                 min(bid) AS low,
@@ -135,7 +161,7 @@ async def get_candles(
             GROUP BY bucket
             ORDER BY bucket;
             """
-            cur.execute(query, (interval_str, start, end))
+            cur.execute(query, (start, end))
             rows = cur.fetchall()
         conn.close()
         candles = []
@@ -150,67 +176,58 @@ async def get_candles(
             })
         return {"candles": candles}
     except Exception as e:
+        logger.exception("Error fetching candlestick data")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ---------------------------
-# New endpoints for instrument groups and instruments
-# ---------------------------
-
 @app.get("/api/instrument-groups")
-async def get_instrument_groups():
+async def get_instrument_groups(db=Depends(get_db)):
     """
     GET endpoint to retrieve distinct instrument groups from the data_provider_instruments table.
     """
     try:
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT DISTINCT unnest(group_ids) AS group_id 
-                FROM data_provider_instruments 
-                WHERE group_ids IS NOT NULL
-                ORDER BY group_id;
-            """)
-            rows = cur.fetchall()
-        conn.close()
-        groups = [row[0] for row in rows]
+        rows = await db.fetch("""
+            SELECT DISTINCT unnest(group_ids) AS group_id 
+            FROM data_provider_instruments 
+            WHERE group_ids IS NOT NULL
+            ORDER BY group_id;
+        """)
+        groups = [row["group_id"] for row in rows]
         return {"groups": groups}
     except Exception as e:
+        logger.exception("Error fetching instrument groups")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/instruments")
 async def get_instruments(
-    group: str = Query("fx_majors", description="Group ID, e.g., fx_majors")
+    group: str = Query("fx_majors", description="Group ID, e.g., fx_majors"),
+    db=Depends(get_db)
 ):
     """
     GET endpoint to retrieve all instruments for a given group.
-    Default group is 'fx_majors'.
     """
     try:
-        conn = get_connection()
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT instrument_id, instrument_name, description, decimal_factor, 
-                       start_hour_for_ticks, start_day_for_minute_candles, 
-                       start_month_for_hourly_candles, start_year_for_daily_candles, group_ids
-                FROM data_provider_instruments
-                WHERE %s = ANY(group_ids)
-                ORDER BY instrument_name;
-            """, (group,))
-            rows = cur.fetchall()
-        conn.close()
+        rows = await db.fetch("""
+            SELECT instrument_id, instrument_name, description, decimal_factor, 
+                   start_hour_for_ticks, start_day_for_minute_candles, 
+                   start_month_for_hourly_candles, start_year_for_daily_candles, group_ids
+            FROM data_provider_instruments
+            WHERE $1 = ANY(group_ids)
+            ORDER BY instrument_name;
+        """, group)
         instruments = []
         for row in rows:
             instruments.append({
-                "instrument_id": row[0],
-                "instrument_name": row[1],
-                "description": row[2],
-                "decimal_factor": row[3],
-                "start_hour_for_ticks": row[4].isoformat() if row[4] else None,
-                "start_day_for_minute_candles": row[5].isoformat() if row[5] else None,
-                "start_month_for_hourly_candles": row[6].isoformat() if row[6] else None,
-                "start_year_for_daily_candles": row[7].isoformat() if row[7] else None,
-                "group_ids": row[8],
+                "instrument_id": row["instrument_id"],
+                "instrument_name": row["instrument_name"],
+                "description": row["description"],
+                "decimal_factor": row["decimal_factor"],
+                "start_hour_for_ticks": row["start_hour_for_ticks"].isoformat() if row["start_hour_for_ticks"] else None,
+                "start_day_for_minute_candles": row["start_day_for_minute_candles"].isoformat() if row["start_day_for_minute_candles"] else None,
+                "start_month_for_hourly_candles": row["start_month_for_hourly_candles"].isoformat() if row["start_month_for_hourly_candles"] else None,
+                "start_year_for_daily_candles": row["start_year_for_daily_candles"].isoformat() if row["start_year_for_daily_candles"] else None,
+                "group_ids": row["group_ids"],
             })
         return {"instruments": instruments}
     except Exception as e:
+        logger.exception("Error fetching instruments")
         raise HTTPException(status_code=500, detail=str(e))

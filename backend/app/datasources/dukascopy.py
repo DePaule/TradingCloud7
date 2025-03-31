@@ -8,9 +8,9 @@ def fetch_tick_data(instr, yr, m, d, h):
     Downloads raw tick data for the specified instrument and time from Dukascopy.
     """
     url = f"https://datafeed.dukascopy.com/datafeed/{instr.upper()}/{yr:04d}/{(m-1):02d}/{d:02d}/{h:02d}h_ticks.bi5"
-    r = requests.get(url)
-    r.raise_for_status()
-    raw = r.content
+    response = requests.get(url)
+    response.raise_for_status()
+    raw = response.content
     try:
         data = LZMADecompressor(FORMAT_AUTO).decompress(raw)
     except Exception:
@@ -24,7 +24,7 @@ def parse_ticks(data, base_time):
     Each tick record is a tuple: (timestamp, bid, ask, bid_volume, ask_volume)
     """
     ticks = []
-    rec_size = 20  # Each record is 20 bytes
+    rec_size = 20  # Each record is 20 bytes.
     for i in range(0, len(data), rec_size):
         rec = data[i:i+rec_size]
         if len(rec) < rec_size:

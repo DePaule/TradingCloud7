@@ -8,3 +8,4 @@ psycopg2-binary
 requests
 debugpy
 jinja2
+asyncpg
