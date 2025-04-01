@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import CandleChart, { Candle } from './components/CandleChart';
+import CandleDataTable from './components/CandleDataTable';
 
 interface Instrument {
   instrument_id: string;
@@ -8,13 +9,13 @@ interface Instrument {
 }
 
 const App: React.FC = () => {
-  // Default dates: today and 30 days ago
+  // Set default dates: today and 30 days ago.
   const today = new Date().toISOString().substring(0, 10);
   const thirtyDaysAgo = new Date(new Date().setDate(new Date().getDate() - 30))
     .toISOString()
     .substring(0, 10);
 
-  // Form state variables
+  // Form state variables.
   const [groups, setGroups] = useState<string[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>('fx_majors');
   const [instruments, setInstruments] = useState<Instrument[]>([]);
@@ -26,7 +27,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Fetch available instrument groups from backend on mount
+  // Fetch available instrument groups from backend on mount.
   useEffect(() => {
     fetch('/api/instrument-groups')
       .then(res => res.json())
@@ -43,7 +44,7 @@ const App: React.FC = () => {
       .catch(err => console.error("Error fetching groups:", err));
   }, []);
 
-  // When the selected group changes, fetch instruments for that group
+  // When the selected group changes, fetch instruments for that group.
   useEffect(() => {
     fetch(`/api/instruments?group=${selectedGroup}`)
       .then(res => res.json())
@@ -58,7 +59,7 @@ const App: React.FC = () => {
       .catch(err => console.error("Error fetching instruments:", err));
   }, [selectedGroup]);
 
-  // Form submission: fetch candle data from backend
+  // Form submission: fetch candle data from backend.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -93,7 +94,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Inline styles for a slim, horizontal layout
+  // Inline styles for a slim, horizontal layout.
   const formContainerStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -204,6 +205,8 @@ const App: React.FC = () => {
       {candles.length > 0 && (
         <div>
           <CandleChart candles={candles} />
+          {/* Display the candle data in a table below the chart */}
+          <CandleDataTable candles={candles} />
         </div>
       )}
     </div>

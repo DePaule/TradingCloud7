@@ -77,23 +77,6 @@ async def fetch_data(request: FetchDataRequest):
         logger.exception("Error importing tick data")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/ticks")
-async def get_ticks(asset: str, start: datetime, end: datetime, db=Depends(get_db)):
-    """
-    GET endpoint to retrieve raw tick data for a given asset and time range.
-    """
-    start, end = adjust_start_end(start, end)
-    table_name = f"{asset.lower()}_tick"
-    try:
-        rows = await db.fetch(
-            f"SELECT * FROM {table_name} WHERE timestamp >= $1 AND timestamp <= $2 ORDER BY timestamp",
-            start, end
-        )
-        return {"ticks": [dict(row) for row in rows]}
-    except Exception as e:
-        logger.exception("Error fetching tick data")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/api/candles")
 async def get_candles(
     asset: str,
@@ -104,18 +87,20 @@ async def get_candles(
     """
     GET endpoint to retrieve aggregated candlestick data for a given asset and time range.
     The time range is adjusted to 00:00 (start) and 23:59 (end).
-    Before aggregation, missing tick data is imported.
-    This endpoint uses a synchronous psycopg2 connection (as in your original implementation)
-    to ensure that candle fetching continues to work.
+    Before aggregation, the endpoint checks if the tick data table exists.
+    If it does not, the table is created and filled using the Dukascopy importer.
+    This endpoint uses a synchronous psycopg2 connection for candle fetching.
     """
     start, end = adjust_start_end(start, end)
-    try:
-        # Import missing tick data (blocking call wrapped in asyncio.to_thread).
-        await asyncio.to_thread(import_tick_data_range, asset, start, end, app.state.db_pool)
-    except Exception as e:
-        logger.warning("Error importing missing tick data: %s", e)
+    table_name = f"{asset.lower()}_tick"
 
-    # Parse the resolution string (as in your original code).
+    # Check table existence using information_schema
+    try:
+            await import_tick_data_range(asset, start, end, app.state.db_pool)
+    except Exception as e:
+        logger.warning("Error checking table existence for %s: %s", table_name, e)
+
+    # Parse resolution string
     if resolution.endswith("s"):
         try:
             seconds = int(resolution[:-1])
@@ -143,11 +128,10 @@ async def get_candles(
     else:
         raise HTTPException(status_code=400, detail="Resolution must end with 's' or start with 'M', 'H' or 'D'")
 
-    table_name = f"{asset.lower()}_tick"
+    # Now fetch the candle data using the original synchronous logic.
     try:
         conn = get_connection()
         with conn.cursor() as cur:
-            # Note: interval_str is embedded directly into the query string.
             query = f"""
             SELECT 
                 time_bucket('{interval_str}', timestamp) AS bucket,
@@ -178,6 +162,7 @@ async def get_candles(
     except Exception as e:
         logger.exception("Error fetching candlestick data")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/instrument-groups")
 async def get_instrument_groups(db=Depends(get_db)):
