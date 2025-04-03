@@ -1,14 +1,23 @@
-import React from 'react';
-import ReactECharts from 'echarts-for-react';
+import React, { useEffect, useRef } from 'react';
+import {
+  createChart,
+  IChartApi,
+  ChartOptions,
+  CandlestickSeries,
+  CandlestickSeriesPartialOptions,
+  ISeriesApi,
+  DeepPartial
+} from 'lightweight-charts';
 
-// Define the Candle interface
 export interface Candle {
+  // ISO string mit Datum und Uhrzeit (z. B. "2023-04-11T09:43:00Z")
   bucket: string;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
+  signal?: number; // 1 für Buy, -1 für Sell (optional)
 }
 
 interface CandleChartProps {
@@ -16,159 +25,94 @@ interface CandleChartProps {
 }
 
 const CandleChart: React.FC<CandleChartProps> = ({ candles }) => {
-  // Prepare the x-axis labels (categories) using the bucket property
-  const categoryData = candles.map(c => c.bucket);
-  
-  // Prepare candlestick values for ECharts
-  // ECharts expects each data item as [open, close, low, high]
-  const values = candles.map(c => [c.open, c.close, c.low, c.high]);
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
-  const option = {
-    title: {
-      text: 'Candlestick Chart',
-      left: 0
-    },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'cross'
-      }
-    },
-    legend: {
-      data: ['Candlestick']
-    },
-    toolbox: {
-      feature: {
-        dataZoom: { yAxisIndex: 'none' },
-        restore: {},
-        saveAsImage: {}
-      }
-    },
-    grid: {
-      left: '10%',
-      right: '10%',
-      bottom: '15%'
-    },
-    xAxis: {
-      type: 'category',
-      data: categoryData,
-      boundaryGap: false,
-      axisLine: { onZero: false },
-      splitLine: { show: false },
-      min: 'dataMin',
-      max: 'dataMax'
-    },
-    yAxis: {
-      scale: true,
-      splitArea: {
-        show: true
-      }
-    },
-    dataZoom: [
-      {
-        type: 'inside',
-        start: 50,
-        end: 100
-      },
-      {
-        show: true,
-        type: 'slider',
-        top: '90%',
-        start: 50,
-        end: 100
-      }
-    ],
-    brush: {
-      toolbox: ['rect', 'polygon', 'lineX', 'lineY', 'keep', 'clear']
-    },
-    series: [
-      {
-        name: 'Candlestick',
-        type: 'candlestick',
-        data: values,
-        itemStyle: {
-          color: '#ec0000',     // up color
-          color0: '#00da3c',    // down color
-          borderColor: '#8A0000',
-          borderColor0: '#008F28'
+  useEffect(() => {
+    if (chartContainerRef.current) {
+      // Create the chart with specified options
+      chartRef.current = createChart(chartContainerRef.current, {
+        width: chartContainerRef.current.clientWidth,
+        height: 400,
+        layout: {
+          background: { color: '#ffffff' },
+          textColor: '#000'
         },
-        markPoint: {
-          label: {
-            formatter: function (param: any) {
-              return param != null ? Math.round(param.value) + '' : '';
-            }
-          },
-          data: [
-            {
-              name: 'Mark',
-              // Using a mid-point as an example coordinate
-              coord: [categoryData[Math.floor(categoryData.length / 2)], values[Math.floor(values.length / 2)][0]],
-              value: values[Math.floor(values.length / 2)][0],
-              itemStyle: {
-                color: 'rgb(41,60,85)'
-              }
-            },
-            {
-              name: 'Highest',
-              type: 'max',
-              valueDim: 'highest'
-            },
-            {
-              name: 'Lowest',
-              type: 'min',
-              valueDim: 'lowest'
-            },
-            {
-              name: 'Avg Close',
-              type: 'average',
-              valueDim: 'close'
-            }
-          ],
-          tooltip: {
-            formatter: function (param: any) {
-              return param.name + '<br>' + (param.data.coord || '');
-            }
-          }
+        grid: {
+          vertLines: { color: '#eee' },
+          horzLines: { color: '#eee' }
         },
-        markLine: {
-          symbol: ['none', 'none'],
-          data: [
-            [
-              {
-                name: 'From lowest to highest',
-                type: 'min',
-                valueDim: 'lowest',
-                symbol: 'circle',
-                symbolSize: 10,
-                label: { show: true },
-                emphasis: { label: { show: false } }
-              },
-              {
-                type: 'max',
-                valueDim: 'highest',
-                symbol: 'circle',
-                symbolSize: 10,
-                label: { show: true },
-                emphasis: { label: { show: false } }
-              }
-            ],
-            {
-              name: 'Min close line',
-              type: 'min',
-              valueDim: 'close'
-            },
-            {
-              name: 'Max close line',
-              type: 'max',
-              valueDim: 'close'
-            }
-          ]
+        crosshair: { mode: 1 },
+        rightPriceScale: { borderColor: '#ccc' },
+        timeScale: {
+          borderColor: '#ccc',
+          timeVisible: true,
+          secondsVisible: true
         }
-      }
-    ]
-  };
+      } as DeepPartial<ChartOptions>);
 
-  return <ReactECharts option={option} style={{ height: '400px', width: '100%' }} />;
+      // Add the candlestick series
+      seriesRef.current = chartRef.current.addSeries(CandlestickSeries, {
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderDownColor: '#ef5350',
+        borderUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+        wickUpColor: '#26a69a'
+      } as CandlestickSeriesPartialOptions);
+    }
+
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chartRef.current?.remove();
+    };
+  }, []);
+
+  // Update series data when candles change
+  useEffect(() => {
+    if (seriesRef.current && candles.length > 0) {
+      const data = candles.map(candle => ({
+        // Convert the ISO string (including time) to a Unix timestamp in seconds
+        time: Math.floor(Date.parse(candle.bucket) / 1000),
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close
+      }));
+      seriesRef.current.setData(data);
+    }
+  }, [candles]);
+
+  // Set markers for buy/sell signals, if available
+  useEffect(() => {
+    if (seriesRef.current) {
+      const markers = candles
+        .filter(candle => candle.signal === 1 || candle.signal === -1)
+        .map(candle => {
+          const timeStamp = Math.floor(Date.parse(candle.bucket) / 1000);
+          return candle.signal === 1
+            ? { time: timeStamp, position: 'aboveBar' as const, color: 'green', shape: 'arrowUp' as const, text: 'Buy' }
+            : { time: timeStamp, position: 'belowBar' as const, color: 'red', shape: 'arrowDown' as const, text: 'Sell' };
+        });
+      // Check if setMarkers is available before calling it
+      const series: any = seriesRef.current;
+      if (typeof series.setMarkers === 'function') {
+        series.setMarkers(markers);
+      } else {
+        console.warn('setMarkers is not available on the current series.');
+      }
+    }
+  }, [candles]);
+
+  return <div ref={chartContainerRef} />;
 };
 
 export default CandleChart;

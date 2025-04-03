@@ -96,7 +96,7 @@ async def get_candles(
 
     # Check table existence using information_schema
     try:
-            await import_tick_data_range(asset, start, end, app.state.db_pool)
+        await import_tick_data_range(asset, start, end, app.state.db_pool)
     except Exception as e:
         logger.warning("Error checking table existence for %s: %s", table_name, e)
 

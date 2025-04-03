@@ -80,7 +80,7 @@ def main():
     entries = []
     for rel_path, content in files:
         # Doppelte Anführungszeichen im Inhalt escapen
-        escaped_content = content.replace('"', '\\"')
+        escaped_content = content#.replace('"', '\\"')
         entry = f'{rel_path} "{escaped_content}"'
         entries.append(entry)
     result = "\n".join(entries)
