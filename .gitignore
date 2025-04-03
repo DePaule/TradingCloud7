@@ -8,3 +8,6 @@ npm-debug.log*
 # Editor-spezifische Dateien
 .vscode/
 *.swp
+
+#backend
+backend/__pycache__/
